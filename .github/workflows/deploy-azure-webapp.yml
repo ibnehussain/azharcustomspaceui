@@ -1,0 +1,95 @@
+name: Deploy to Azure Web App
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: 'copilot-spaces-chat'   # Set this to your Azure Web App name
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Create and activate virtual environment
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+
+      - name: Install dependencies
+        run: |
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create startup script
+        run: |
+          cat > startup.sh << 'EOF'
+          #!/bin/bash
+          cd /home/site/wwwroot
+          source .venv/bin/activate
+          gunicorn src.api_bridge:app \
+            --worker-class uvicorn.workers.UvicornWorker \
+            --bind 0.0.0.0:8000 \
+            --workers 2 \
+            --timeout 120 \
+            --access-logfile - \
+            --error-logfile -
+          EOF
+          chmod +x startup.sh
+
+      - name: Install gunicorn in venv
+        run: |
+          source .venv/bin/activate
+          pip install gunicorn
+
+      - name: Prepare deployment package
+        run: |
+          # Ensure UI files are included
+          ls -la ui/
+          # Verify src modules
+          ls -la src/
+
+      - name: Upload artifact for deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-app
+          path: |
+            src/
+            ui/
+            requirements.txt
+            startup.sh
+            .venv/
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: 'production'
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: python-app
+
+      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          startup-command: 'bash startup.sh'

@@ -1,0 +1,35 @@
+{
+    "servers": {
+        "github-copilot-spaces": {
+            "type": "http",
+            "url": "https://api.githubcopilot.com/mcp/x/copilot_spaces",
+            "headers": {
+                "Authorization": "Bearer ${input:github_mcp_pat}"
+            }
+        },
+        "github-all": {
+            "type": "http",
+            "url": "https://api.githubcopilot.com/mcp/",
+            "headers": {
+                "Authorization": "Bearer ${input:github_mcp_pat}"
+            }
+        },
+        "copilot-spaces-local": {
+            "type": "stdio",
+            "command": "python",
+            "args": ["src/mcp_server.py"],
+            "env": {
+                "GITHUB_TOKEN": "${env:GITHUB_TOKEN}",
+                "MCP_TRANSPORT": "stdio"
+            }
+        }
+    },
+    "inputs": [
+        {
+            "type": "promptString",
+            "id": "github_mcp_pat",
+            "description": "GitHub Personal Access Token (with copilot scope)",
+            "password": true
+        }
+    ]
+}
